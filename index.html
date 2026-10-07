@@ -96,9 +96,50 @@ body {
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <script>
-// iPad/iPhone: by default Safari treats game audio like a ringtone and silences it
-// in Silent Mode. Declaring a playback session makes it behave like music or video.
-if (navigator.audioSession) { navigator.audioSession.type = 'playback'; }
+// iPad/iPhone audio. Safari only lets sound start from inside a tap, and by default
+// treats game audio like a ringtone. This declares a media playback session, and on
+// every tap resumes the engine's audio context and plays one silent sample through it.
+// Open the page with ?audio to show a status line for diagnosing silence.
+(function () {
+  var info = { contexts: [], starts: 0, unlocks: 0, lastError: '' };
+  window.__rookAudio = info;
+  if (navigator.audioSession) { navigator.audioSession.type = 'playback'; }
+  var Native = window.AudioContext || window.webkitAudioContext;
+  if (!Native) { info.lastError = 'no AudioContext in this browser'; return; }
+  function Wrapped(options) { var ctx = new Native(options); info.contexts.push(ctx); return ctx; }
+  Wrapped.prototype = Native.prototype;
+  window.AudioContext = Wrapped;
+  window.webkitAudioContext = Wrapped;
+  var nativeStart = AudioBufferSourceNode.prototype.start;
+  AudioBufferSourceNode.prototype.start = function () { info.starts++; return nativeStart.apply(this, arguments); };
+  function unlock() {
+    info.contexts.forEach(function (ctx) {
+      try {
+        if (ctx.state !== 'running') { ctx.resume().catch(function (e) { info.lastError = String(e); }); }
+        var src = ctx.createBufferSource();
+        src.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+        src.connect(ctx.destination);
+        nativeStart.call(src, 0);
+        info.unlocks++;
+      } catch (e) { info.lastError = String(e); }
+    });
+  }
+  ['touchend', 'pointerup', 'mouseup', 'click', 'keydown'].forEach(function (name) {
+    document.addEventListener(name, unlock, true);
+  });
+  if (location.search.indexOf('audio') !== -1) {
+    window.addEventListener('load', function () {
+      var bar = document.createElement('div');
+      bar.style.cssText = 'position:fixed;left:0;top:0;z-index:9999;background:#000c;color:#fff;font:14px monospace;padding:4px 8px;pointer-events:none';
+      document.body.appendChild(bar);
+      setInterval(function () {
+        bar.textContent = 'audio: ' + (info.contexts.map(function (c) { return c.state + ' ' + c.sampleRate + 'Hz'; }).join(', ') || 'no context') +
+          ' | session ' + (navigator.audioSession ? navigator.audioSession.type : 'n/a') +
+          ' | sounds ' + info.starts + ' | taps ' + info.unlocks + (info.lastError ? ' | error ' + info.lastError : '');
+      }, 500);
+    });
+  }
+})();
 </script>
 	</head>
 	<body>
