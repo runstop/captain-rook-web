@@ -95,6 +95,11 @@ body {
 <meta name="robots" content="noindex, nofollow">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
+<script>
+// iPad/iPhone: by default Safari treats game audio like a ringtone and silences it
+// in Silent Mode. Declaring a playback session makes it behave like music or video.
+if (navigator.audioSession) { navigator.audioSession.type = 'playback'; }
+</script>
 	</head>
 	<body>
 		<canvas id="canvas">
